@@ -1,0 +1,10 @@
+all_labels:
+  negative: 0
+  neutral: 1
+  positive: 2
+input_shape: !!python/tuple
+- 3
+- 224
+- 224
+learning_rate: 0.001
+num_classes: 3

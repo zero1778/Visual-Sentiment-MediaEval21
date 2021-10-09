@@ -1,0 +1,6 @@
+pytorch-lightning
+pandas
+scikit-learn
+opencv-python
+vit-pytorch
+matplotlib
