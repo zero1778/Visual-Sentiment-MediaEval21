@@ -265,7 +265,6 @@ class VisualModel(pl.LightningModule):
         preds_f, preds_i = torch.max(preds, dim=1)
         preds_i[preds_f <= 0.4] = 1
         
-
         # preds[preds >= 0.6] = 1
         # preds[preds <= 0.4] = 0
         # preds[(preds > 0.4) * (preds < 0.6)] = 0.5
