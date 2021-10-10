@@ -25,7 +25,7 @@ def main():
     all_labels = {'negative':0,'neutral':1,'positive':2}
 
     class_data = DataModule(input_shape[1:], imgpath, csvpath, task=1, batch_size=32)
-    class_model = VisualModel(input_shape, classes, all_labels).load_from_checkpoint("wandb/run-20211009_074646-ResNet50-newBCE-weight/files/mediaeval21_visualsentiment/ResNet50-newBCE-weight/checkpoints/epoch=2-step=365.ckpt")
+    class_model = VisualModel(input_shape, classes).load_from_checkpoint("wandb/run-20211007_183158-TwinsSVT/files/mediaeval21_visualsentiment/10wqqobr/checkpoints/epoch=13-step=1707.ckpt")
     # class_model.freeze()
     bar = LitProgressBar()
 
@@ -45,8 +45,7 @@ def main():
         gpus=(1 if torch.cuda.is_available() else 0),
         max_epochs=100,
         fast_dev_run=False,
-        # logger=pl.loggers.TensorBoardLogger("logs/", name="image", version=1),
-        # logger = wandb_logger,
+
         callbacks=[bar],
     )
     # trainer.test(ckpt_path="wandb/run-20211007_183158-10wqqobr/files/mediaeval21_visualsentiment/10wqqobr/checkpoints/epoch=13-step=1707.ckpt",test_dataloaders=class_data.test_dataloader())

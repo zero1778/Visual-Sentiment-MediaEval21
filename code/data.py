@@ -1,6 +1,6 @@
 import torch
 import pytorch_lightning as pl
-
+import torchvision
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
@@ -9,6 +9,60 @@ import glob
 import numpy as np
 import cv2
 import pandas as pd 
+
+from typing import Callable
+
+class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
+    """Samples elements randomly from a given list of indices for imbalanced dataset
+    Arguments:
+        indices: a list of indices
+        num_samples: number of samples to draw
+        callback_get_label: a callback-like function which takes two arguments - dataset and index
+    """
+
+    def __init__(self, dataset, indices: list = None, num_samples: int = None, callback_get_label: Callable = None):
+        # if indices is not provided, all elements in the dataset will be considered
+        self.indices = list(range(len(dataset))) if indices is None else indices
+
+        # define custom callback
+        self.callback_get_label = callback_get_label
+
+        # if num_samples is not provided, draw `len(indices)` samples in each iteration
+        self.num_samples = len(self.indices) if num_samples is None else num_samples
+
+        # distribution of classes in the dataset
+        df = pd.DataFrame()
+        df["label"] = self._get_labels(dataset)
+        df.index = self.indices
+        df = df.sort_index()
+
+        label_to_count = df["label"].value_counts()
+
+        weights = 1.0 / label_to_count[df["label"]]
+
+        self.weights = torch.DoubleTensor(weights.to_list())
+
+    def _get_labels(self, dataset):
+        if self.callback_get_label:
+            return self.callback_get_label(dataset)
+        elif isinstance(dataset, torchvision.datasets.MNIST):
+            return dataset.train_labels.tolist()
+        elif isinstance(dataset, torchvision.datasets.ImageFolder):
+            return [x[1] for x in dataset.imgs]
+        elif isinstance(dataset, torchvision.datasets.DatasetFolder):
+            return dataset.samples[:][1]
+        elif isinstance(dataset, torch.utils.data.Subset):
+            return dataset.dataset.imgs[:][1]
+        elif isinstance(dataset, torch.utils.data.Dataset):
+            return dataset.get_labels()
+        else:
+            raise NotImplementedError
+
+    def __iter__(self):
+        return (self.indices[i] for i in torch.multinomial(self.weights, self.num_samples, replacement=True))
+
+    def __len__(self):
+        return self.num_samples
 
 class VisualDataset(Dataset):
     def __init__(self,  imgpath, datalist, size, task, type, transformation=True ):
@@ -20,7 +74,7 @@ class VisualDataset(Dataset):
         self.trans = {
             'train': transforms.Compose([
                 transforms.ToPILImage(),
-                transforms.RandomResizedCrop(256),
+                transforms.RandomResizedCrop(224),
                 transforms.RandomHorizontalFlip(),
                 # transforms.CenterCrop(224),
                 transforms.ToTensor(),
@@ -28,10 +82,10 @@ class VisualDataset(Dataset):
             ]),
             'val': transforms.Compose([
                 transforms.ToPILImage(),
-                transforms.Resize(256),
-                transforms.CenterCrop(256),
+                transforms.Resize(224),
+                transforms.CenterCrop(224),
                 transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ]),
         }
 
@@ -62,13 +116,16 @@ class VisualDataset(Dataset):
             label = np.where(self.class_task[self.task] == self.datalist.iloc[idx][2:9])[0]
         else: 
             label = np.where(self.class_task[self.task] == self.datalist.iloc[idx][9:])[0]
-        label = torch.tensor(label)
+        # label = torch.tensor(label)
         
         if self.transformation:
             img = self.trans[self.type](img)
 
         return {'sample': img,
                 'label' : label}
+
+    def get_labels(self): 
+        return list(self.datalist['T1'])
         
 
 class DataModule(pl.LightningDataModule):
@@ -119,29 +176,24 @@ class DataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_data, num_workers=4, batch_size=self.batch_size, shuffle=True
+            self.train_data, num_workers=4, 
+            # sampler=ImbalancedDatasetSampler(self.train_data),
+            batch_size=self.batch_size, 
+            shuffle=True
         )
 
     def val_dataloader(self):
-    
         return DataLoader(
-            self.val_data, num_workers=4, batch_size=self.batch_size, shuffle=False
+            self.val_data, num_workers=4, 
+            batch_size=self.batch_size, 
+            shuffle=False
         )
 
     def test_dataloader(self):
-        # print(self.val_data)
-        # print(1111111111111111)
-        # datalist = pd.read_csv(self.csvpath)
-
-        # if self.task == 1:
-        #     _, test = train_test_split(datalist, test_size=0.2, random_state=140720, 
-        #                                     stratify=datalist['T1'])
-
-        # # train = train.reset_index(drop=True)
-        # test = test.reset_index(drop=True)
-        # self.test_data = VisualDataset(self.imgpath, test, self.size, self.task)
         return DataLoader(
-            self.val_data, num_workers=4, batch_size=self.batch_size, shuffle=False
+            self.val_data, num_workers=4, 
+            batch_size=self.batch_size, 
+            shuffle=False
         )
 
 

@@ -25,7 +25,6 @@ class WandbImagePredCallback(pl.Callback):
     
     def __init__(self, val_samples, num_samples=32):
         super().__init__()
-        # import pdb; pdb.set_trace()
         self.val_imgs, self.val_labels = val_samples['sample'], val_samples['label']
         self.val_imgs = self.val_imgs[:num_samples]
         self.val_labels = self.val_labels[:num_samples]
@@ -65,7 +64,7 @@ def main():
     early_stopping_callback = EarlyStopping(
         monitor="val_loss", patience=7, verbose=True, mode="min"
     )
-    wandb_logger = WandbLogger(name="resnet50BCE3_weight", project='mediaeval21_visualsentiment', id='ResNet50-newBCE-weight', job_type='train')
+    wandb_logger = WandbLogger(name="TwinsSVT_focalloss", project='mediaeval21_visualsentiment', id='TwinsSVT_focalloss', job_type='train')
     wandb_logger.watch(class_model)
 
     trainer = pl.Trainer(
@@ -73,11 +72,11 @@ def main():
         profiler=True,
         progress_bar_refresh_rate=4,
         gpus=(1 if torch.cuda.is_available() else 0),
-        max_epochs=100,
+        max_epochs=200,
         fast_dev_run=False,
         # logger=pl.loggers.TensorBoardLogger("logs/", name="image", version=1),
         logger = wandb_logger,
-        callbacks=[bar, WandbImagePredCallback(val_samples)],
+        callbacks=[bar],
     )
     trainer.fit(class_model, class_data)
     # trainer.test(datamodule=class_data)
