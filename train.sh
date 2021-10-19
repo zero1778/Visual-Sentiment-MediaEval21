@@ -1,1 +1,1 @@
-python code/train.py
+CUDA_LAUNCH_BLOCKING=1 python code/train.py

@@ -74,16 +74,18 @@ class VisualDataset(Dataset):
         self.trans = {
             'train': transforms.Compose([
                 transforms.ToPILImage(),
+                # transforms.RandomCrop(224),
                 transforms.RandomResizedCrop(224),
-                transforms.RandomHorizontalFlip(),
+                transforms.RandomHorizontalFlip(p=0.6),
                 # transforms.CenterCrop(224),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ]),
             'val': transforms.Compose([
                 transforms.ToPILImage(),
-                transforms.Resize(224),
-                transforms.CenterCrop(224),
+                # transforms.Resize(224),
+                # transforms.CenterCrop(224),
+                transforms.RandomResizedCrop(224),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ]),
@@ -109,7 +111,7 @@ class VisualDataset(Dataset):
         # import pdb; pdb.set_trace()
         img_name = self.datalist.iloc[idx][0] + ".jpg"
 
-        img = cv2.imread(self.imgpath + "/" + img_name)
+        ori_img = cv2.imread(self.imgpath + "/" + img_name)
         if (self.task == 1):
             label = self.class_task[self.task][self.datalist.iloc[idx][1]]
         elif (self.task == 2): 
@@ -118,9 +120,12 @@ class VisualDataset(Dataset):
             label = np.where(self.class_task[self.task] == self.datalist.iloc[idx][9:])[0]
         # label = torch.tensor(label)
         
-        if self.transformation:
-            img = self.trans[self.type](img)
+        if self.transformation :
+            img = self.trans[self.type](ori_img)
 
+        # return {'sample': img,
+        #         'label' : label,
+        #         'img': ori_img}
         return {'sample': img,
                 'label' : label}
 
@@ -145,7 +150,7 @@ class DataModule(pl.LightningDataModule):
         datalist = pd.read_csv(self.csvpath)
 
         if self.task == 1:
-            train, val = train_test_split(datalist, test_size=0.2, random_state=140720, 
+            train, val = train_test_split(datalist, test_size=0.2, random_state=2021, 
                                             stratify=datalist['T1'])
 
         train = train.reset_index(drop=True)
@@ -155,7 +160,7 @@ class DataModule(pl.LightningDataModule):
 
         self.train_data = VisualDataset(self.imgpath, train, self.size, self.task, 'train')
         self.val_data = VisualDataset(self.imgpath, val, self.size, self.task, 'val')
-
+        
 
     def setup(self, stage=None):
         # transform, split,...

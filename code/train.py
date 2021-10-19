@@ -20,7 +20,6 @@ class LitProgressBar(ProgressBar):
 
 class WandbImagePredCallback(pl.Callback):
     """Logs the input images and output predictions of a module.
-    
     Predictions and labels are logged as class indices."""
     
     def __init__(self, val_samples, num_samples=32):
@@ -34,7 +33,6 @@ class WandbImagePredCallback(pl.Callback):
 
         logits = pl_module(val_imgs)
         preds = torch.argmax(logits, 1)
-
         trainer.logger.experiment.log({
             "val/examples": [
                 wandb.Image(x, caption=f"Pred:{pred}, Label:{y}") 
@@ -48,11 +46,12 @@ def main():
     classes = 3
     imgpath = "data/images"
     csvpath = "data/devset.csv"
-    all_labels = {'negative':0,'neutral':1,'positive':2}
+    all_labels = {'negative':0,'neutral': 1,'positive':2}
+    # all_labels = {'negative':0,'positive':1}
 
-    class_data = DataModule(input_shape[1:], imgpath, csvpath, task=1, batch_size=16)
+    class_data = DataModule(input_shape[1:], imgpath, csvpath, task=1, batch_size=8)
     class_model = VisualModel(input_shape, classes, all_labels)
-    class_data.prepare_data()
+    class_data.prepare_data()    
     class_data.setup()
     val_samples = next(iter(class_data.val_dataloader()))
 
@@ -64,18 +63,19 @@ def main():
     early_stopping_callback = EarlyStopping(
         monitor="val_loss", patience=7, verbose=True, mode="min"
     )
-    wandb_logger = WandbLogger(name="TwinsSVT_focalloss", project='mediaeval21_visualsentiment', id='TwinsSVT_focalloss', job_type='train')
+    wandb_logger = WandbLogger(name="vgg19", project='mediaeval21_visualsentiment', id='vgg19', job_type='train')
     wandb_logger.watch(class_model)
 
     trainer = pl.Trainer(
         default_root_dir="logs",
         profiler=True,
-        progress_bar_refresh_rate=4,
+        progress_bar_refresh_rate=10,
         gpus=(1 if torch.cuda.is_available() else 0),
         max_epochs=200,
         fast_dev_run=False,
         # logger=pl.loggers.TensorBoardLogger("logs/", name="image", version=1),
         logger = wandb_logger,
+        check_val_every_n_epoch=5,
         callbacks=[bar],
     )
     trainer.fit(class_model, class_data)
