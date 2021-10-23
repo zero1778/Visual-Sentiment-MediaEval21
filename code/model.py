@@ -126,11 +126,11 @@ class VisualModel(pl.LightningModule):
         # )
 
         # ### resnet50
-        # backbone = models.resnet50(pretrained=True)
-        # num_filters = backbone.fc.in_features
-        # layers = list(backbone.children())[:-1]
-        # self.feature_extractor = nn.Sequential(*layers)
-        # self.classifier = nn.Linear(num_filters, num_classes)
+        backbone = models.resnet101(pretrained=True)
+        num_filters = backbone.fc.in_features
+        layers = list(backbone.children())[:-1]
+        self.feature_extractor = nn.Sequential(*layers)
+        self.classifier = nn.Linear(num_filters, num_classes)
 
         # self.feature_extractor = models.resnet50(pretrained=True)
         # # layers are frozen by using eval()
@@ -144,11 +144,11 @@ class VisualModel(pl.LightningModule):
         # self.classifier = nn.Linear(n_sizes, num_classes)
 
         ### VGG19
-        backbone = models.vgg19(pretrained=True)
-        num_filters = backbone.classifier[0].in_features
-        layers = list(backbone.children())[:-1]
-        self.feature_extractor = nn.Sequential(*layers)
-        self.classifier = nn.Linear(num_filters, num_classes)
+        # backbone = models.vgg19(pretrained=True)
+        # num_filters = backbone.classifier[0].in_features
+        # layers = list(backbone.children())[:-1]
+        # self.feature_extractor = nn.Sequential(*layers)
+        # self.classifier = nn.Linear(num_filters, num_classes)
 
         self.predict = torch.empty((), dtype=torch.int64, device = 'cuda')
         self.all_labels = all_labels
@@ -208,23 +208,23 @@ class VisualModel(pl.LightningModule):
         
         ### CROSS ENTROPY
         # weight = torch.tensor([0.5, 10.0, 1.3]).to("cuda")
-        loss = F.cross_entropy(logits, y)
+        # loss = F.cross_entropy(logits, y)
         # loss = loss * weight
         # loss = loss.mean()
 
         preds_i = torch.argmax(logits, dim=1)
 
         ### BINARY CROSS ENTROPY    
-        # logits = torch.sigmoid(logits)
-        # weight = torch.tensor([0.05, 1.0, 0.13]).to("cuda")
-        # loss = F.binary_cross_entropy_with_logits(logits, y_onehot)
-        # loss = loss * weight
-        # loss = loss.mean()
+        logits = torch.sigmoid(logits)
+        weight = torch.tensor([0.05, 1.0, 0.13]).to("cuda")
+        loss = F.binary_cross_entropy_with_logits(logits, y_onehot)
+        loss = loss * weight
+        loss = loss.mean()
 
-        # preds = logits.clone()
-        # preds = torch.sigmoid(preds)
-        # preds_f, preds_i = torch.max(preds, dim=1)
-        # preds_i[preds_f <= 0.6] = 1
+        preds = logits.clone()
+        preds = torch.sigmoid(preds)
+        preds_f, preds_i = torch.max(preds, dim=1)
+        preds_i[preds_f <= 0.6] = 1
 
         f1_mac = self.f1_macro(preds_i, y)
         f1_mic = self.f1_micro(preds_i, y)
@@ -291,10 +291,10 @@ class VisualModel(pl.LightningModule):
         # preds_i = torch.argmax(logits, dim=1)
         
         # ### CROSS ENTROPY
-        weight = torch.tensor([0.5, 10.0, 1.3]).to("cuda")
-        loss = F.cross_entropy(logits, y)
-        loss = loss * weight
-        loss = loss.mean()
+        # weight = torch.tensor([0.5, 10.0, 1.3]).to("cuda")
+        # loss = F.cross_entropy(logits, y)
+        # loss = loss * weight
+        # loss = loss.mean()
 
         preds_i = torch.argmax(logits, dim=1)
         
@@ -410,7 +410,7 @@ class VisualModel(pl.LightningModule):
                               normalize=True,
                               target_names = list(self.all_labels.keys()),
                               title="Confusion matrix of Resnet50BCE3_weighted\n F1 = " + str(f1_f.cpu().detach().numpy()) + ", thres = 0.45",
-                              fname="conf/Resnet50BCE3_diffweighted_face.png")
+                              fname="conf/Resnet101CE.png")
         
         print(cm)
     
