@@ -25,7 +25,7 @@ def main():
     all_labels = {'negative':0,'neutral':1,'positive':2}
 
     class_data = DataModule(input_shape[1:], imgpath, csvpath, task=1, batch_size=32)
-    class_model = VisualModel(input_shape, classes, all_labels).load_from_checkpoint("wandb/run-20211009_074646-ResNet50-newBCE-weight/files/mediaeval21_visualsentiment/ResNet50-newBCE-weight/checkpoints/epoch=2-step=365.ckpt")
+    class_model = VisualModel(input_shape, classes, all_labels).load_from_checkpoint("wandb/run-20211023_121752-Resnet101_CE/files/mediaeval21_visualsentiment/Resnet101_CE/checkpoints/epoch=1-step=303.ckpt")
     # class_model.freeze()
     bar = LitProgressBar()
 
