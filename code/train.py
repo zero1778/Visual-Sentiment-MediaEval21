@@ -44,12 +44,15 @@ class WandbImagePredCallback(pl.Callback):
 def main():
     input_shape = (3, 224, 224)
     classes = 3
-    imgpath = "data/images"
-    csvpath = "data/devset.csv"
+    train_imgpath = "data/images"
+    train_csvpath = "data/devset.csv"
+    val_imgpath = "data/test/images"
+    val_csvpath = "data/testset_mediaeval.csv"
     all_labels = {'negative':0,'neutral': 1,'positive':2}
     # all_labels = {'negative':0,'positive':1}
+    pl.seed_everything(42)
 
-    class_data = DataModule(input_shape[1:], imgpath, csvpath, task=1, batch_size=8)
+    class_data = DataModule(input_shape[1:],  train_imgpath, val_imgpath, train_csvpath, val_csvpath,  task=1, batch_size=16)
     class_model = VisualModel(input_shape, classes, all_labels)
     class_data.prepare_data()    
     class_data.setup()
@@ -63,7 +66,7 @@ def main():
     early_stopping_callback = EarlyStopping(
         monitor="val_loss", patience=7, verbose=True, mode="min"
     )
-    wandb_logger = WandbLogger(name="vgg19", project='mediaeval21_visualsentiment', id='vgg19', job_type='train')
+    wandb_logger = WandbLogger(name="Resnet101_bce_im", project='mediaeval21_visualsentiment', id='Resnet101_bce_im', job_type='train')
     wandb_logger.watch(class_model)
 
     trainer = pl.Trainer(

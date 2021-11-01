@@ -6,13 +6,14 @@ import pytorch_lightning as pl
 import torch.nn.functional as F
 # from transformers import AutoModel
 from sklearn.metrics import accuracy_score
-
+from sklearn.metrics import f1_score
 import torchvision.models as models
 import torchmetrics
 from PIL import Image
-# from vit_pytorch import ViT
-from vit_pytorch.efficient import ViT
+from vit_pytorch import ViT
+# from vit_pytorch.efficient import ViT
 from vit_pytorch.levit import LeViT
+# from vit_pytorch.efficient import ViT
 from nystrom_attention import Nystromformer
 from vit_pytorch.twins_svt import TwinsSVT
 from vit_pytorch.nest import NesT
@@ -67,6 +68,7 @@ class VisualModel(pl.LightningModule):
         #     num_landmarks = 256
         # )
 
+        
         # self.levit = LeViT(
         #     image_size = 224,
         #     num_classes = num_classes,
@@ -75,8 +77,7 @@ class VisualModel(pl.LightningModule):
         #     depth = 4,              # transformer of depth 4 at each stage
         #     heads = (4, 6, 8),      # heads at each stage
         #     mlp_mult = 2,
-        #     dropout = 0.1,
-        #     transformer = efficient_transformer
+        #     dropout = 0.1
         # )
         
         
@@ -156,6 +157,8 @@ class VisualModel(pl.LightningModule):
         self.acc = torchmetrics.Accuracy()
         self.f1_macro = torchmetrics.F1(num_classes=self.num_classes, average='macro')
         self.f1_micro = torchmetrics.F1(num_classes=self.num_classes)
+        self.f1_weighted = torchmetrics.F1(num_classes=self.num_classes, average='weighted')
+        # self.f1_micro = torchmetrics.F1(num_classes=self.num_classes)
         self.conf = torchmetrics.ConfusionMatrix(num_classes)
 
     # returns the size of the output tensor going into Linear layer from the conv block.
@@ -184,7 +187,7 @@ class VisualModel(pl.LightningModule):
         # x = F.relu(self.fc2(x))
         # x = F.log_softmax(self.fc3(x), dim=1)
         # import pdb; pdb.set_trace()
-        # x = self.vit(x)
+        # x = self.twinssvt(x)
         self.feature_extractor.eval()
         with torch.no_grad():
             representations = self.feature_extractor(x).flatten(1)
@@ -199,7 +202,7 @@ class VisualModel(pl.LightningModule):
         x, y = batch["sample"], batch["label"] 
         # import pdb; pdb.set_trace()
         # y = torch.reshape(y, (-1, self.num_classes))
-        # y_onehot = F.one_hot(y.to(torch.int64), num_classes=self.num_classes).to(torch.float32)
+        y_onehot = F.one_hot(y.to(torch.int64), num_classes=self.num_classes).to(torch.float32)
         logits = self(x)
 
         ### FOCAL LOSS
@@ -212,33 +215,34 @@ class VisualModel(pl.LightningModule):
         # loss = loss * weight
         # loss = loss.mean()
 
-        preds_i = torch.argmax(logits, dim=1)
+        # preds_i = torch.argmax(logits, dim=1)
 
         ### BINARY CROSS ENTROPY    
-        logits = torch.sigmoid(logits)
-        weight = torch.tensor([0.05, 1.0, 0.13]).to("cuda")
+        # logits = torch.sigmoid(logits)
+        # weight = torch.tensor([0.05, 1.0, 0.13]).to("cuda")
         loss = F.binary_cross_entropy_with_logits(logits, y_onehot)
-        loss = loss * weight
-        loss = loss.mean()
+        # loss = loss * weight
+        # loss = loss.mean()
 
         preds = logits.clone()
         preds = torch.sigmoid(preds)
         preds_f, preds_i = torch.max(preds, dim=1)
-        preds_i[preds_f <= 0.6] = 1
+        preds_i[preds_f <= 0.45] = 1
 
-        f1_mac = self.f1_macro(preds_i, y)
-        f1_mic = self.f1_micro(preds_i, y)
+        # val_f1_mac = self.f1_macro(preds_i, y)
+        # val_f1_mic = self.f1_micro(preds_i, y)
+        f1_w = self.f1_weighted(preds_i, y)
 
         self.log('train_loss', loss, on_step=True, on_epoch=True, logger=True)
-        self.log('train_f1_mac', f1_mac, on_step=True, on_epoch=True, logger=True)
-        self.log('train_f1_mic', f1_mic, on_step=True, on_epoch=True, logger=True)
+        # self.log('train_f1_mac', f1_mac, on_step=True, on_epoch=True, logger=True)
+        self.log('train_f1_w', f1_w, on_step=True, on_epoch=True, logger=True)
 
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y = batch["sample"], batch["label"] 
         # y = torch.reshape(y, (-1, self.num_classes))
-        # y_onehot = F.one_hot(y.to(torch.int64), num_classes=self.num_classes).to(torch.float32)
+        y_onehot = F.one_hot(y.to(torch.int64), num_classes=self.num_classes).to(torch.float32)
         logits = self(x)
         
         ### FOCAL LOSS
@@ -247,34 +251,35 @@ class VisualModel(pl.LightningModule):
         
         ### CROSS ENTROPY
         # weight = torch.tensor([0.5, 10.0, 1.3]).to("cuda")
-        loss = F.cross_entropy(logits, y)
+        # loss = F.cross_entropy(logits, y)
         # loss = loss * weights
         # loss = loss.mean()
 
-        preds_i = torch.argmax(logits, dim=1)
+        # preds_i = torch.argmax(logits, dim=1)
 
         ### BINARY CROSS ENTROPY
         # weight = torch.tensor([0.05, 1.0, 0.13]).to("cuda")
-        # loss = F.binary_cross_entropy_with_logits(logits, y_onehot)
+        loss = F.binary_cross_entropy_with_logits(logits, y_onehot)
         # loss = loss * weight
         # loss = loss.mean()
 
-        # preds = logits.clone()
-        # preds = torch.sigmoid(preds)
-        # preds_f, preds_i = torch.max(preds, dim=1)
-        # preds_i[preds_f <= 0.6] = 1
+        preds = logits.clone()
+        preds = torch.sigmoid(preds)
+        preds_f, preds_i = torch.max(preds, dim=1)
+        preds_i[preds_f <= 0.45] = 1
         
 
         # preds[preds >= 0.6] = 1
         # preds[preds <= 0.4] = 0
         # preds[(preds > 0.4) * (preds < 0.6)] = 0.5
 
-        val_f1_mac = self.f1_macro(preds_i, y)
-        val_f1_mic = self.f1_micro(preds_i, y)
+        # val_f1_mac = self.f1_macro(preds_i, y)
+        # val_f1_mic = self.f1_micro(preds_i, y)
+        val_f1_w = self.f1_weighted(preds_i, y)
 
         self.log("val_loss", loss, prog_bar=True)
-        self.log("val_f1_mac", val_f1_mac, prog_bar=True)
-        self.log("val_f1_mic", val_f1_mic, prog_bar=True)
+        # self.log("val_f1_mac", val_f1_mac, prog_bar=True)
+        self.log("val_f1_w", val_f1_w, prog_bar=True)
 
         return {"preds": preds_i, "labels": y}
 
@@ -296,20 +301,23 @@ class VisualModel(pl.LightningModule):
         # loss = loss * weight
         # loss = loss.mean()
 
-        preds_i = torch.argmax(logits, dim=1)
+        # preds_i = torch.argmax(logits, dim=1)
         
         ### BINARY CROSS ENTROPY
         # weight = torch.tensor([0.05, 1.0, 0.13]).to("cuda")
-        # loss = F.binary_cross_entropy_with_logits(logits, y_onehot)
+        loss = F.binary_cross_entropy_with_logits(logits, y_onehot)
         # loss = loss * weight
         # loss = loss.mean()
 
-        # preds = logits.clone()
-        # preds = torch.sigmoid(preds)
-        # preds_f, preds_i = torch.max(preds, dim=1)
-        # preds_i[preds_f <= 0.48] = 1
+        preds = logits.clone()
+        # import pdb;pdb.set_trace()
+        preds = torch.sigmoid(preds)
+        preds_f, preds_i = torch.max(preds, dim=1)
+        # import pdb;pdb.set_trace()
+
+        preds_i[preds_f <= 0.45] = 1
         
-        ### POST-PROCESSING 
+        # ### POST-PROCESSING 
         # unorm = UnNormalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
         # cnt = 0
         # mtcnn = MTCNN(image_size=224)
@@ -350,8 +358,10 @@ class VisualModel(pl.LightningModule):
         
         
 
-        val_f1_mac = self.f1_macro(preds_i, y)
-        val_f1_mic = self.f1_micro(preds_i, y)
+        # val_f1_mac = self.f1_macro(preds_i, y)
+        # val_f1_mic = self.f1_micro(preds_i, y)
+        val_f1_w = self.f1_weighted(preds_i, y)
+        # import pdb;pdb.set_trace()
         # print(val_f1)
                   
         
@@ -359,8 +369,9 @@ class VisualModel(pl.LightningModule):
         # self.log_dict(conf)
         # import pdb; pdb.set_trace()
         # self.temp = val_f1
-        self.log("val_f1", val_f1 , prog_bar=True)
-        return {"preds": preds_i, "labels": y, "f1": val_f1}
+        self.log("val_f1_w", val_f1_w , prog_bar=True)
+        # self.log("val_f1_mic", val_f1_mic , prog_bar=True)
+        return {"preds": preds_i, "labels": y, "f1_w": val_f1_w}
         # return self.conf(preds, y)
 
     def validation_epoch_end(self, outputs):
@@ -388,31 +399,34 @@ class VisualModel(pl.LightningModule):
         wandb.log({"Confusion matrix" : wandb.plot.confusion_matrix( 
         preds=predicts, y_true=labels,
         class_names=list(self.all_labels.keys()),
-        title="Vit_trans")})
+        title="resnet101_bce_im")})
         
     def test_epoch_end(self, outputs):
         predicts = []
         labels = []
         f1_f = 0
-
+        # import pdb; pdb.set_trace()
         for sample in outputs:
             predict, label = sample['preds'].tolist(), sample['labels'].tolist()
             predicts += predict
             labels += label
 
-            val_f1 = sample['f1']
-            f1_f += val_f1
-            
-        f1_f /= len(outputs)
+            # val_f1 = sample['f1_w']
+            # f1_f += val_f1
+        # import pdb; pdb.set_trace()
+        f1_f =  f1_score(labels, predicts, average='weighted')
+        # f1_f /= len(outputs)
         
         cm = confusion_matrix(labels, predicts, labels=list(self.all_labels.values()))
         plot_confusion_matrix(cm=cm, 
                               normalize=True,
                               target_names = list(self.all_labels.keys()),
-                              title="Confusion matrix of Resnet50BCE3_weighted\n F1 = " + str(f1_f.cpu().detach().numpy()) + ", thres = 0.45",
-                              fname="conf/Resnet101CE.png")
+                            #   title="Confusion matrix of Resnet50BCE3_weighted\n F1 = " + str(f1_f.cpu().detach().numpy()) + ", thres = 0.45",
+                            title="Confusion matrix of Resnet101BCE3_im\n F1 = " + str(f1_f) + ", thres = 0.45",
+                              fname="conf/Resnet101_BCE_im.png")
         
         print(cm)
+        print("result = ",f1_f)
     
         # fig = plt.figure()
         # ax = fig.add_subplot(111)
@@ -424,8 +438,98 @@ class VisualModel(pl.LightningModule):
         # plt.xlabel('Predicted')
         # plt.ylabel('True')
         # plt.savefig("conf/resnet50_BCE_weight_imbalanced.png")
+    def predict_step(self, batch, batch_idx):
+        # this calls forward
+        # return self(batch)
+        x, y = batch["sample"], batch["label"]
+        
+        # import pdb; pdb.set_trace()
+        # y = torch.reshape(y, (-1, self.num_classes))
+        y_onehot = F.one_hot(y.to(torch.int64), num_classes=self.num_classes).to(torch.float32)
+        logits = self(x)
+        
+        ### FOCAL LOSS
+        # loss = FocalLoss()(logits, y)
+        # preds_i = torch.argmax(logits, dim=1)
+        
+        # ### CROSS ENTROPY
+        # weight = torch.tensor([0.5, 10.0, 1.3]).to("cuda")
+        # loss = F.cross_entropy(logits, y)
+        # loss = loss * weight
+        # loss = loss.mean()
 
-            
+        # preds_i = torch.argmax(logits, dim=1)
+        
+        ### BINARY CROSS ENTROPY
+        # weight = torch.tensor([0.05, 1.0, 0.13]).to("cuda")
+        # loss = F.binary_cross_entropy_with_logits(logits, y_onehot)
+        # loss = loss * weight
+        # loss = loss.mean()
+
+        preds = logits.clone()
+        # import pdb;pdb.set_trace()
+        preds = torch.sigmoid(preds)
+        preds_f, preds_i = torch.max(preds, dim=1)
+        # import pdb;pdb.set_trace()
+
+        preds_i[preds_f <= 0.45] = 1
+        
+        # ### POST-PROCESSING 
+        # unorm = UnNormalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
+        # cnt = 0
+        # mtcnn = MTCNN(image_size=224)
+        # for idx, imgs in enumerate(x):
+        #     # print(cnt)
+        #     pred_face = []
+        #     img = unorm(imgs).permute(1,2,0)*255
+        #     tensor = img.cpu().numpy() # make sure tensor is on cpu
+        #     cv2.imwrite("image.jpg", tensor)
+        #     tensor = cv2.imread("image.jpg")
+        #     img = cv2.cvtColor(tensor, cv2.COLOR_BGR2RGB)
+        #     img = Image.fromarray(img)
+        #     # import pdb; pdb.set_trace()
+        #     boxes, probs, points = mtcnn.detect(img, landmarks=True)
+        #     boxes, probs, points = mtcnn.select_boxes(
+        #                     boxes, probs, points, img, method='largest_over_threshold',
+        #                     threshold=0.995
+        #                 )
+        #     # import pdb; pdb.set_trace()
+        #     if (boxes is None): continue
+        #     # import pdb; pdb.set_ trace()
+        #     # img_draw = img.copy()
+        #     for i, (box, point) in enumerate(zip(boxes, points)):
+        #         face = extract_face(img, box)
+        #         pred_face.append(FER_image(face))
+
+        #     # Filter most emotion in an image
+        #     # tope = pred_face.count(1)
+        #     tope = max(set(pred_face), key=pred_face.count)
+        #     # if (float(tope) / float(len(pred_face))) >= 0.7: 
+        #     if (tope == 1):
+        #         preds_i[idx] = 2
+        #     # if (pred_face.count(0) == len(pred_face) and len(pred_face) < 4):
+        #     #     preds_i[idx] = 1
+        #         # if (y[idx] != 2): 
+        #             # import pdb; pdb.set_trace()
+        #     cnt += 1
+        
+        
+
+        # val_f1_mac = self.f1_macro(preds_i, y)
+        # val_f1_mic = self.f1_micro(preds_i, y)
+        # val_f1_w = self.f1_weighted(preds_i, y)
+        # import pdb;pdb.set_trace()
+        # print(val_f1)
+                  
+        
+        # conf = {"conf" : self.conf(preds_i, y)}
+        # self.log_dict(conf)
+        # import pdb; pdb.set_trace()
+        # self.temp = val_f1
+        # self.log("val_f1_w", val_f1_w , prog_bar=True)
+        # self.log("val_f1_mic", val_f1_mic , prog_bar=True)
+        return preds_i
+        # return self.conf(preds, y)
             
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)

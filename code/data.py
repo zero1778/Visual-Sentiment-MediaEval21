@@ -6,6 +6,8 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from sklearn.model_selection import train_test_split
 import glob
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 import numpy as np
 import cv2
 import pandas as pd 
@@ -83,12 +85,18 @@ class VisualDataset(Dataset):
             ]),
             'val': transforms.Compose([
                 transforms.ToPILImage(),
-                # transforms.Resize(224),
+                # transforms.Resize((224, 224)),
                 # transforms.CenterCrop(224),
                 transforms.RandomResizedCrop(224),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ]),
+            # 'val': A.Compose([
+            #     A.Resize(224, 224),
+            #     ToTensorV2(),
+            #     A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])], p=1.
+                
+            # ),
         }
 
        
@@ -110,7 +118,7 @@ class VisualDataset(Dataset):
     def __getitem__(self, idx):
         # import pdb; pdb.set_trace()
         img_name = self.datalist.iloc[idx][0] + ".jpg"
-
+        # print(img_name)
         ori_img = cv2.imread(self.imgpath + "/" + img_name)
         if (self.task == 1):
             label = self.class_task[self.task][self.datalist.iloc[idx][1]]
@@ -123,43 +131,46 @@ class VisualDataset(Dataset):
         if self.transformation :
             img = self.trans[self.type](ori_img)
 
-        # return {'sample': img,
-        #         'label' : label,
-        #         'img': ori_img}
         return {'sample': img,
-                'label' : label}
+                'label' : label,
+                'img': self.imgpath}
+        # return {'sample': img,
+        #         'label' : label}
 
     def get_labels(self): 
         return list(self.datalist['T1'])
         
 
 class DataModule(pl.LightningDataModule):
-    def __init__(self, size, imgpath, csvpath, task, batch_size=32):
+    def __init__(self, size, train_imgpath, val_imgpath, train_csvpath, val_csvpath, task, batch_size=32):
         super().__init__()
 
         self.batch_size = batch_size
         self.size = size 
-        self.imgpath = imgpath
-        self.csvpath = csvpath
+        self.train_imgpath = train_imgpath
+        self.train_csvpath = train_csvpath
+        self.val_imgpath = val_imgpath
+        self.val_csvpath = val_csvpath
         self.task = task
         
         # self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     def prepare_data(self):
         # set up class Dataset
-        datalist = pd.read_csv(self.csvpath)
+        trainlist = pd.read_csv(self.train_csvpath)
+        vallist = pd.read_csv(self.val_csvpath)
 
-        if self.task == 1:
-            train, val = train_test_split(datalist, test_size=0.2, random_state=2021, 
-                                            stratify=datalist['T1'])
+        # if self.task == 1:
+            # train, val = train_test_split(datalist, test_size=0.2, random_state=2021, 
+                                            # stratify=datalist['T1'])
 
-        train = train.reset_index(drop=True)
-        val = val.reset_index(drop=True)
+        # train = train.reset_index(drop=True)
+        # val = val.reset_index(drop=True)
         
         # TODO: Imbalancing processing
 
-        self.train_data = VisualDataset(self.imgpath, train, self.size, self.task, 'train')
-        self.val_data = VisualDataset(self.imgpath, val, self.size, self.task, 'val')
+        self.train_data = VisualDataset(self.train_imgpath, trainlist, self.size, self.task, 'train')
+        self.val_data = VisualDataset(self.val_imgpath, vallist, self.size, self.task, 'val')
         
 
     def setup(self, stage=None):
@@ -182,9 +193,9 @@ class DataModule(pl.LightningDataModule):
     def train_dataloader(self):
         return DataLoader(
             self.train_data, num_workers=4, 
-            # sampler=ImbalancedDatasetSampler(self.train_data),
+            sampler=ImbalancedDatasetSampler(self.train_data),
             batch_size=self.batch_size, 
-            shuffle=True
+            # shuffle=True
         )
 
     def val_dataloader(self):
@@ -197,7 +208,7 @@ class DataModule(pl.LightningDataModule):
     def test_dataloader(self):
         return DataLoader(
             self.val_data, num_workers=4, 
-            batch_size=self.batch_size, 
+            batch_size=1, 
             shuffle=False
         )
 
